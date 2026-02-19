@@ -1,0 +1,26 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosec
+    - misspell
+    - unconvert
+    - gocritic
+
+linters-settings:
+  gosec:
+    severity: medium
+    confidence: medium
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec

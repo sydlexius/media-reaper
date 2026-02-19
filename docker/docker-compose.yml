@@ -1,0 +1,33 @@
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ..:/app
+      - go-modules:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    env_file:
+      - ../.env
+    environment:
+      - MEDIA_REAPER_SECURE_COOKIES=false
+      - MEDIA_REAPER_DB_PATH=/app/data/media-reaper.db
+
+  frontend:
+    image: node:22-bookworm-slim
+    working_dir: /app/web
+    command: npm run dev -- --host 0.0.0.0
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../web:/app/web
+      - frontend-node-modules:/app/web/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  go-modules:
+  go-build-cache:
+  frontend-node-modules:

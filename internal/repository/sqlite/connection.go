@@ -49,7 +49,7 @@ func (r *ConnectionRepository) GetAll(ctx context.Context) ([]*repository.Connec
 	if err != nil {
 		return nil, fmt.Errorf("listing connections: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return r.scanConnections(rows)
 }
@@ -61,7 +61,7 @@ func (r *ConnectionRepository) GetAllEnabled(ctx context.Context) ([]*repository
 	if err != nil {
 		return nil, fmt.Errorf("listing enabled connections: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return r.scanConnections(rows)
 }

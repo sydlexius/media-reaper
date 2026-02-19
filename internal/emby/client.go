@@ -116,11 +116,11 @@ func (c *Client) get(ctx context.Context, path string, queryParams map[string]st
 		req.URL.RawQuery = q.Encode()
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is constructed from admin-configured baseURL, not user input
 	if err != nil {
 		return fmt.Errorf("executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)

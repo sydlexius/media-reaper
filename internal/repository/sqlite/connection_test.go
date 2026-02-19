@@ -42,7 +42,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("creating schema: %v", err)
 	}
 
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 

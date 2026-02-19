@@ -17,7 +17,7 @@ func TestTestConnection(t *testing.T) {
 			t.Errorf("missing or wrong X-Emby-Token header: %s", r.Header.Get("X-Emby-Token"))
 		}
 
-		json.NewEncoder(w).Encode(SystemInfo{
+		_ = json.NewEncoder(w).Encode(SystemInfo{
 			ServerName: "Test Emby",
 			Version:    "4.8.0.0",
 			ID:         "abc123",
@@ -45,7 +45,7 @@ func TestGetUsers(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 
-		json.NewEncoder(w).Encode([]*User{
+		_ = json.NewEncoder(w).Encode([]*User{
 			{ID: "user1", Name: "Admin", Policy: &UserPolicy{IsAdministrator: true, EnableAllFolders: true}},
 			{ID: "user2", Name: "Viewer", Policy: &UserPolicy{EnableAllFolders: false, EnabledFolders: []string{"lib1"}}},
 		})
@@ -75,7 +75,7 @@ func TestGetLibraries(t *testing.T) {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
 
-		json.NewEncoder(w).Encode(MediaFoldersResponse{
+		_ = json.NewEncoder(w).Encode(MediaFoldersResponse{
 			Items: []Library{
 				{ID: "lib1", Name: "Movies", CollectionType: "movies"},
 				{ID: "lib2", Name: "TV Shows", CollectionType: "tvshows"},
@@ -110,7 +110,7 @@ func TestGetUserItems(t *testing.T) {
 			t.Errorf("expected Recursive=true, got %q", r.URL.Query().Get("Recursive"))
 		}
 
-		json.NewEncoder(w).Encode(ItemsResult{
+		_ = json.NewEncoder(w).Encode(ItemsResult{
 			Items: []*Item{
 				{ID: "item1", Name: "Test Movie", Type: "Movie"},
 			},
@@ -142,7 +142,7 @@ func TestGetUserItems(t *testing.T) {
 func TestConnectionFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("Access denied"))
+		_, _ = w.Write([]byte("Access denied"))
 	}))
 	defer server.Close()
 
@@ -158,7 +158,7 @@ func TestTrailingSlashTrimmed(t *testing.T) {
 		if r.URL.Path != "/System/Info/Public" {
 			t.Errorf("unexpected path (double slash?): %s", r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(SystemInfo{ServerName: "Test", Version: "1.0"})
+		_ = json.NewEncoder(w).Encode(SystemInfo{ServerName: "Test", Version: "1.0"})
 	}))
 	defer server.Close()
 

@@ -24,7 +24,7 @@ func setupTestService(t *testing.T) *Service {
 	if err != nil {
 		t.Fatalf("opening test db: %v", err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { _ = db.Close() })
 
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		t.Fatalf("enabling foreign keys: %v", err)
@@ -293,7 +293,9 @@ func TestUpdateHandlerNewAPIKey(t *testing.T) {
 	}
 
 	var resp connectionResponse
-	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
 
 	// Should show last 4 of new key
 	if !strings.HasSuffix(resp.MaskedAPIKey, "-key") {

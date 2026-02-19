@@ -65,6 +65,14 @@ jobs:
             -e MEDIA_REAPER_ADMIN_USER=admin \
             -e MEDIA_REAPER_ADMIN_PASS=testpass \
             media-reaper:ci
-          sleep 3
-          curl -f http://localhost:8080/api/health
-          docker stop smoke
+          for i in $(seq 1 10); do
+            curl -sf http://localhost:8080/api/health && exit 0
+            sleep 2
+          done
+          echo "Health check failed after 20s, container logs:"
+          docker logs smoke
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker stop smoke 2>/dev/null || true

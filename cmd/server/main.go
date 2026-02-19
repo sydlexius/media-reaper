@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/sydlexius/media-reaper/internal/auth"
@@ -20,25 +21,32 @@ import (
 // @in cookie
 // @name media-reaper-session
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	cfg := config.Load()
 
 	database, err := db.New(cfg.DBPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	userRepo := sqliterepo.NewUserRepository(database)
 	authService := auth.NewService(userRepo, cfg)
 
 	if err := authService.Bootstrap(context.Background()); err != nil {
-		_ = database.Close()
-		log.Fatalf("Failed to bootstrap admin user: %v", err)
+		return fmt.Errorf("failed to bootstrap admin user: %w", err)
 	}
 
 	srv := server.New(cfg, authService)
 	log.Printf("Starting media-reaper on port %d", cfg.Port)
 	if err := srv.Start(); err != nil {
-		log.Fatalf("Server failed: %v", err)
+		return fmt.Errorf("server failed: %w", err)
 	}
+
+	return nil
 }

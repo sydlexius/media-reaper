@@ -7,6 +7,7 @@ import (
 
 	"github.com/sydlexius/media-reaper/internal/auth"
 	"github.com/sydlexius/media-reaper/internal/config"
+	"github.com/sydlexius/media-reaper/internal/connection"
 	"github.com/sydlexius/media-reaper/internal/db"
 	sqliterepo "github.com/sydlexius/media-reaper/internal/repository/sqlite"
 	"github.com/sydlexius/media-reaper/internal/server"
@@ -35,14 +36,25 @@ func run() error {
 	}
 	defer func() { _ = database.Close() }()
 
+	// Encryption
+	encryptor, err := connection.NewEncryptor(cfg.MasterKey)
+	if err != nil {
+		return fmt.Errorf("failed to initialize encryption: %w", err)
+	}
+
+	// Repositories
 	userRepo := sqliterepo.NewUserRepository(database)
+	connRepo := sqliterepo.NewConnectionRepository(database)
+
+	// Services
 	authService := auth.NewService(userRepo, cfg)
+	connService := connection.NewService(connRepo, encryptor)
 
 	if err := authService.Bootstrap(context.Background()); err != nil {
 		return fmt.Errorf("failed to bootstrap admin user: %w", err)
 	}
 
-	srv := server.New(cfg, authService)
+	srv := server.New(cfg, authService, connService)
 	log.Printf("Starting media-reaper on port %d", cfg.Port)
 	if err := srv.Start(); err != nil {
 		return fmt.Errorf("server failed: %w", err)

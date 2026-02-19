@@ -2,6 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router";
 import { LoginPage } from "./pages/LoginPage";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AppShell } from "./components/AppShell";
+import { DashboardPage } from "./pages/DashboardPage";
+import { MediaPage } from "./pages/MediaPage";
+import { RulesPage } from "./pages/RulesPage";
+import { ActionsPage } from "./pages/ActionsPage";
+import { ConnectionsPage } from "./pages/ConnectionsPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -19,15 +26,19 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
-            path="/*"
             element={
               <ProtectedRoute>
-                <div className="p-8 text-gray-900 dark:text-white">
-                  Authenticated content placeholder
-                </div>
+                <AppShell />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route index element={<DashboardPage />} />
+            <Route path="media" element={<MediaPage />} />
+            <Route path="rules" element={<RulesPage />} />
+            <Route path="actions" element={<ActionsPage />} />
+            <Route path="connections" element={<ConnectionsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

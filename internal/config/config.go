@@ -8,7 +8,7 @@ import (
 type Config struct {
 	Port          int
 	DBPath        string
-	SessionSecret string
+	SessionSecret string //nolint:gosec // config field name, not a hardcoded secret
 	AdminUser     string
 	AdminPass     string
 	SecureCookies bool

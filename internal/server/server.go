@@ -29,7 +29,7 @@ func New(cfg *config.Config, authService *auth.Service) *Server {
 	e := echo.New()
 	e.HideBanner = true
 
-	e.Use(echomw.Logger())
+	e.Use(echomw.Logger()) //nolint:staticcheck // TODO(#59): replace with slog RequestLogger
 	e.Use(echomw.Recover())
 
 	s := &Server{echo: e, cfg: cfg, authService: authService}

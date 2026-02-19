@@ -8,7 +8,7 @@ import (
 
 type loginRequest struct {
 	Username string `json:"username"`
-	Password string `json:"password"`
+	Password string `json:"password"` //nolint:gosec // login request DTO, not a hardcoded secret
 }
 
 type userResponse struct {

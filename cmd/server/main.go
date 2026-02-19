@@ -32,6 +32,7 @@ func main() {
 	authService := auth.NewService(userRepo, cfg)
 
 	if err := authService.Bootstrap(context.Background()); err != nil {
+		_ = database.Close()
 		log.Fatalf("Failed to bootstrap admin user: %v", err)
 	}
 

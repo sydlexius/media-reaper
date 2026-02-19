@@ -33,17 +33,17 @@ func New(dbPath string) (*sql.DB, error) {
 	database.SetMaxIdleConns(1)
 
 	if _, err := database.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, fmt.Errorf("enabling WAL mode: %w", err)
 	}
 
 	if _, err := database.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, fmt.Errorf("enabling foreign keys: %w", err)
 	}
 
 	if err := runMigrations(database); err != nil {
-		database.Close()
+		_ = database.Close()
 		return nil, fmt.Errorf("running migrations: %w", err)
 	}
 

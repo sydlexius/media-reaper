@@ -17,6 +17,18 @@ type userResponse struct {
 	Role     string `json:"role"`
 }
 
+// LoginHandler authenticates a user and creates a session.
+// @Summary Login
+// @Description Authenticate with username and password to create a session
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body loginRequest true "Login credentials"
+// @Success 200 {object} userResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 429 {object} map[string]string
+// @Router /auth/login [post]
 func (s *Service) LoginHandler(c echo.Context) error {
 	var req loginRequest
 	if err := c.Bind(&req); err != nil {
@@ -46,6 +58,13 @@ func (s *Service) LoginHandler(c echo.Context) error {
 	})
 }
 
+// LogoutHandler destroys the current session.
+// @Summary Logout
+// @Description Destroy the current session and clear the session cookie
+// @Tags auth
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Router /auth/logout [post]
 func (s *Service) LogoutHandler(c echo.Context) error {
 	if err := s.DestroySession(c.Response(), c.Request()); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to destroy session"})
@@ -53,6 +72,15 @@ func (s *Service) LogoutHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"message": "logged out"})
 }
 
+// MeHandler returns the currently authenticated user.
+// @Summary Current user
+// @Description Get the currently authenticated user from the session
+// @Tags auth
+// @Produce json
+// @Success 200 {object} userResponse
+// @Failure 401 {object} map[string]string
+// @Security SessionCookie
+// @Router /auth/me [get]
 func (s *Service) MeHandler(c echo.Context) error {
 	user, err := s.GetUserFromSession(c.Request().Context(), c.Request())
 	if err != nil {

@@ -11,6 +11,14 @@ import (
 	"github.com/sydlexius/media-reaper/internal/server"
 )
 
+// @title Media Reaper API
+// @version 0.1.0
+// @description API for media-reaper, a tool that integrates Sonarr/Radarr with Emby to identify watched media eligible for deletion.
+// @host localhost:8080
+// @BasePath /api
+// @securityDefinitions.apikey SessionCookie
+// @in cookie
+// @name media-reaper-session
 func main() {
 	cfg := config.Load()
 

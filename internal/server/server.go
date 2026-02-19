@@ -10,10 +10,13 @@ import (
 
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
+	echoSwagger "github.com/swaggo/echo-swagger"
 	"github.com/sydlexius/media-reaper/internal/auth"
 	"github.com/sydlexius/media-reaper/internal/config"
 	authmw "github.com/sydlexius/media-reaper/internal/server/middleware"
 	"github.com/sydlexius/media-reaper/web"
+
+	_ "github.com/sydlexius/media-reaper/docs"
 )
 
 type Server struct {
@@ -40,6 +43,7 @@ func (s *Server) registerRoutes() {
 
 	// Public routes
 	api.GET("/health", s.healthHandler)
+	api.GET("/docs/*", echoSwagger.WrapHandler)
 
 	// Auth routes (public, login has rate limiting)
 	authGroup := api.Group("/auth")
@@ -118,6 +122,13 @@ func (s *Server) loginRateLimiter() echo.MiddlewareFunc {
 	return echomw.RateLimiterWithConfig(rateLimiterConfig)
 }
 
+// healthHandler returns the service health status.
+// @Summary Health check
+// @Description Returns service health status
+// @Tags system
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Router /health [get]
 func (s *Server) healthHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"status": "ok"})
 }

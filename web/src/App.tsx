@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router";
+import { LoginPage } from "./pages/LoginPage";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,7 +17,17 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<div>Media Reaper</div>} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/*"
+            element={
+              <ProtectedRoute>
+                <div className="p-8 text-gray-900 dark:text-white">
+                  Authenticated content placeholder
+                </div>
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

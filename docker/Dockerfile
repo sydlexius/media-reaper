@@ -7,7 +7,7 @@ COPY web/ ./
 RUN npm run build
 
 # Stage 2: Build backend with embedded frontend
-FROM golang:1.23-bookworm AS backend
+FROM golang:1.25-bookworm AS backend
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download

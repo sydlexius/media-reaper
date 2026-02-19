@@ -190,6 +190,79 @@ func (s *Service) DeleteHandler(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+type testConnectionRequest struct {
+	Type   string `json:"type"`
+	URL    string `json:"url"`
+	APIKey string `json:"apiKey"` //nolint:gosec // request DTO, not a hardcoded secret
+}
+
+// TestSavedHandler tests a saved connection by ID.
+// @Summary Test saved connection
+// @Description Test connectivity to a saved connection by decrypting its API key and pinging the remote server
+// @Tags connections
+// @Produce json
+// @Param id path string true "Connection ID"
+// @Success 200 {object} TestResult
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Security SessionCookie
+// @Router /connections/{id}/test [post]
+func (s *Service) TestSavedHandler(c echo.Context) error {
+	id := c.Param("id")
+	conn, err := s.repo.GetByID(c.Request().Context(), id)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+	}
+	if conn == nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "connection not found"})
+	}
+
+	apiKey, err := s.encryptor.Decrypt(conn.EncryptedAPIKey)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to decrypt api key"})
+	}
+
+	result, err := TestConnection(c.Request().Context(), string(conn.Type), conn.URL, apiKey)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// TestUnsavedHandler tests a connection without saving it.
+// @Summary Test unsaved connection
+// @Description Test connectivity with provided connection details without persisting
+// @Tags connections
+// @Accept json
+// @Produce json
+// @Param request body testConnectionRequest true "Connection details to test"
+// @Success 200 {object} TestResult
+// @Failure 400 {object} map[string]string
+// @Security SessionCookie
+// @Router /connections/test [post]
+func (s *Service) TestUnsavedHandler(c echo.Context) error {
+	var req testConnectionRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	}
+
+	if req.Type == "" || req.URL == "" || req.APIKey == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "type, url, and apiKey are required"})
+	}
+
+	if !isValidConnectionType(req.Type) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "type must be sonarr, radarr, or emby"})
+	}
+
+	result, err := TestConnection(c.Request().Context(), req.Type, req.URL, req.APIKey)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
 func isValidConnectionType(t string) bool {
 	switch repository.ConnectionType(t) {
 	case repository.ConnectionTypeSonarr, repository.ConnectionTypeRadarr, repository.ConnectionTypeEmby:

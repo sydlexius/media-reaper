@@ -16,6 +16,17 @@ definitions:
       username:
         type: string
     type: object
+  connection.TestResult:
+    properties:
+      appName:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+      version:
+        type: string
+    type: object
   connection.connectionResponse:
     properties:
       createdAt:
@@ -44,6 +55,15 @@ definitions:
       apiKey:
         type: string
       name:
+        type: string
+      type:
+        type: string
+      url:
+        type: string
+    type: object
+  connection.testConnectionRequest:
+    properties:
+      apiKey:
         type: string
       type:
         type: string
@@ -293,6 +313,70 @@ paths:
       security:
       - SessionCookie: []
       summary: Update connection
+      tags:
+      - connections
+  /connections/{id}/test:
+    post:
+      description: Test connectivity to a saved connection by decrypting its API key
+        and pinging the remote server
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/connection.TestResult'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Test saved connection
+      tags:
+      - connections
+  /connections/test:
+    post:
+      consumes:
+      - application/json
+      description: Test connectivity with provided connection details without persisting
+      parameters:
+      - description: Connection details to test
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/connection.testConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/connection.TestResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Test unsaved connection
       tags:
       - connections
   /health:

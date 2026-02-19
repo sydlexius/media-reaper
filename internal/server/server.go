@@ -57,12 +57,14 @@ func (s *Server) registerRoutes() {
 	// Protected routes
 	protected := api.Group("", authmw.RequireAuth(s.authService))
 
-	// Connection management
+	// Connection management (test routes before :id to avoid param capture)
+	protected.POST("/connections/test", s.connectionService.TestUnsavedHandler)
 	protected.POST("/connections", s.connectionService.CreateHandler)
 	protected.GET("/connections", s.connectionService.ListHandler)
 	protected.GET("/connections/:id", s.connectionService.GetHandler)
 	protected.PUT("/connections/:id", s.connectionService.UpdateHandler)
 	protected.DELETE("/connections/:id", s.connectionService.DeleteHandler)
+	protected.POST("/connections/:id/test", s.connectionService.TestSavedHandler)
 }
 
 func (s *Server) registerSPA() {

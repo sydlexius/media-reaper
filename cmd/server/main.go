@@ -2,8 +2,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/sydlexius/media-reaper/internal/auth"
 	"github.com/sydlexius/media-reaper/internal/config"
@@ -54,9 +60,29 @@ func run() error {
 		return fmt.Errorf("failed to bootstrap admin user: %w", err)
 	}
 
+	// Health checker
+	healthChecker := connection.NewHealthChecker(connRepo, encryptor, cfg.HealthCheckInterval)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go healthChecker.Start(ctx)
+
 	srv := server.New(cfg, authService, connService)
 	log.Printf("Starting media-reaper on port %d", cfg.Port)
-	if err := srv.Start(); err != nil {
+
+	// Graceful shutdown on interrupt
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+		<-sigCh
+		log.Println("Shutting down...")
+		cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+
+	if err := srv.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("server failed: %w", err)
 	}
 

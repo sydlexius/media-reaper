@@ -1,0 +1,23 @@
+meta {
+  name: Update Connection
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/connections/:id
+  body: json
+  auth: none
+}
+
+params:path {
+  id: {{connectionId}}
+}
+
+body:json {
+  {
+    "name": "Sonarr (updated)",
+    "type": "sonarr",
+    "url": "http://localhost:8989"
+  }
+}

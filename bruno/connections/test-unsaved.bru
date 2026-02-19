@@ -1,0 +1,19 @@
+meta {
+  name: Test Unsaved Connection
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/connections/test
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "type": "sonarr",
+    "url": "http://localhost:8989",
+    "apiKey": "your-api-key-here"
+  }
+}

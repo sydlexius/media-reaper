@@ -16,6 +16,73 @@ definitions:
       username:
         type: string
     type: object
+  connection.TestResult:
+    properties:
+      appName:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+      version:
+        type: string
+    type: object
+  connection.connectionResponse:
+    properties:
+      createdAt:
+        type: string
+      enabled:
+        type: boolean
+      id:
+        type: string
+      lastCheckedAt:
+        type: string
+      maskedApiKey:
+        type: string
+      name:
+        type: string
+      status:
+        type: string
+      type:
+        type: string
+      updatedAt:
+        type: string
+      url:
+        type: string
+    type: object
+  connection.createConnectionRequest:
+    properties:
+      apiKey:
+        type: string
+      name:
+        type: string
+      type:
+        type: string
+      url:
+        type: string
+    type: object
+  connection.testConnectionRequest:
+    properties:
+      apiKey:
+        type: string
+      type:
+        type: string
+      url:
+        type: string
+    type: object
+  connection.updateConnectionRequest:
+    properties:
+      apiKey:
+        type: string
+      enabled:
+        type: boolean
+      name:
+        type: string
+      type:
+        type: string
+      url:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact: {}
@@ -100,6 +167,218 @@ paths:
       summary: Current user
       tags:
       - auth
+  /connections:
+    get:
+      description: List all connections with masked API keys
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/connection.connectionResponse'
+            type: array
+      security:
+      - SessionCookie: []
+      summary: List connections
+      tags:
+      - connections
+    post:
+      consumes:
+      - application/json
+      description: Create a new Sonarr, Radarr, or Emby connection with encrypted
+        API key
+      parameters:
+      - description: Connection details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/connection.createConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/connection.connectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Create connection
+      tags:
+      - connections
+  /connections/{id}:
+    delete:
+      description: Delete a connection by ID
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Delete connection
+      tags:
+      - connections
+    get:
+      description: Get a connection by ID with masked API key
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/connection.connectionResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Get connection
+      tags:
+      - connections
+    put:
+      consumes:
+      - application/json
+      description: Update a connection. API key is optional (omit to keep current).
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Connection details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/connection.updateConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/connection.connectionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Update connection
+      tags:
+      - connections
+  /connections/{id}/test:
+    post:
+      description: Test connectivity to a saved connection by decrypting its API key
+        and pinging the remote server
+      parameters:
+      - description: Connection ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/connection.TestResult'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Test saved connection
+      tags:
+      - connections
+  /connections/test:
+    post:
+      consumes:
+      - application/json
+      description: Test connectivity with provided connection details without persisting
+      parameters:
+      - description: Connection details to test
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/connection.testConnectionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/connection.TestResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - SessionCookie: []
+      summary: Test unsaved connection
+      tags:
+      - connections
   /health:
     get:
       description: Returns service health status

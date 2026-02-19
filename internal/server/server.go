@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
 	"log"
@@ -13,6 +14,7 @@ import (
 	echoSwagger "github.com/swaggo/echo-swagger"
 	"github.com/sydlexius/media-reaper/internal/auth"
 	"github.com/sydlexius/media-reaper/internal/config"
+	"github.com/sydlexius/media-reaper/internal/connection"
 	authmw "github.com/sydlexius/media-reaper/internal/server/middleware"
 	"github.com/sydlexius/media-reaper/web"
 
@@ -20,19 +22,20 @@ import (
 )
 
 type Server struct {
-	echo        *echo.Echo
-	cfg         *config.Config
-	authService *auth.Service
+	echo              *echo.Echo
+	cfg               *config.Config
+	authService       *auth.Service
+	connectionService *connection.Service
 }
 
-func New(cfg *config.Config, authService *auth.Service) *Server {
+func New(cfg *config.Config, authService *auth.Service, connectionService *connection.Service) *Server {
 	e := echo.New()
 	e.HideBanner = true
 
 	e.Use(echomw.Logger()) //nolint:staticcheck // TODO(#59): replace with slog RequestLogger
 	e.Use(echomw.Recover())
 
-	s := &Server{echo: e, cfg: cfg, authService: authService}
+	s := &Server{echo: e, cfg: cfg, authService: authService, connectionService: connectionService}
 	s.registerRoutes()
 	s.registerSPA()
 	return s
@@ -51,8 +54,17 @@ func (s *Server) registerRoutes() {
 	authGroup.POST("/logout", s.authService.LogoutHandler)
 	authGroup.GET("/me", s.authService.MeHandler)
 
-	// Protected routes (for future use)
-	_ = api.Group("", authmw.RequireAuth(s.authService))
+	// Protected routes
+	protected := api.Group("", authmw.RequireAuth(s.authService))
+
+	// Connection management (test routes before :id to avoid param capture)
+	protected.POST("/connections/test", s.connectionService.TestUnsavedHandler)
+	protected.POST("/connections", s.connectionService.CreateHandler)
+	protected.GET("/connections", s.connectionService.ListHandler)
+	protected.GET("/connections/:id", s.connectionService.GetHandler)
+	protected.PUT("/connections/:id", s.connectionService.UpdateHandler)
+	protected.DELETE("/connections/:id", s.connectionService.DeleteHandler)
+	protected.POST("/connections/:id/test", s.connectionService.TestSavedHandler)
 }
 
 func (s *Server) registerSPA() {
@@ -135,4 +147,9 @@ func (s *Server) healthHandler(c echo.Context) error {
 
 func (s *Server) Start() error {
 	return s.echo.Start(fmt.Sprintf(":%d", s.cfg.Port))
+}
+
+// Shutdown gracefully shuts down the server.
+func (s *Server) Shutdown(ctx context.Context) error {
+	return s.echo.Shutdown(ctx)
 }

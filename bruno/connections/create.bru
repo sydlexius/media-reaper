@@ -1,0 +1,20 @@
+meta {
+  name: Create Connection
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/connections
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Sonarr",
+    "type": "sonarr",
+    "url": "http://localhost:8989",
+    "apiKey": "your-api-key-here"
+  }
+}

@@ -2,7 +2,10 @@ package server
 
 import (
 	"fmt"
+	"io/fs"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -10,6 +13,7 @@ import (
 	"github.com/sydlexius/media-reaper/internal/auth"
 	"github.com/sydlexius/media-reaper/internal/config"
 	authmw "github.com/sydlexius/media-reaper/internal/server/middleware"
+	"github.com/sydlexius/media-reaper/web"
 )
 
 type Server struct {
@@ -27,6 +31,7 @@ func New(cfg *config.Config, authService *auth.Service) *Server {
 
 	s := &Server{echo: e, cfg: cfg, authService: authService}
 	s.registerRoutes()
+	s.registerSPA()
 	return s
 }
 
@@ -44,6 +49,48 @@ func (s *Server) registerRoutes() {
 
 	// Protected routes (for future use)
 	_ = api.Group("", authmw.RequireAuth(s.authService))
+}
+
+func (s *Server) registerSPA() {
+	distFS, err := fs.Sub(web.Assets, "dist")
+	if err != nil {
+		log.Println("No embedded frontend assets found (dev mode)")
+		return
+	}
+
+	entries, err := fs.ReadDir(distFS, ".")
+	if err != nil || len(entries) == 0 {
+		log.Println("No embedded frontend assets found (dev mode)")
+		return
+	}
+
+	log.Println("Serving embedded frontend assets")
+	fileServer := http.FileServer(http.FS(distFS))
+
+	s.echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			path := c.Request().URL.Path
+
+			// Skip API routes
+			if strings.HasPrefix(path, "/api") {
+				return next(c)
+			}
+
+			// Try to serve static file
+			if path != "/" {
+				f, err := distFS.(fs.ReadFileFS).ReadFile(strings.TrimPrefix(path, "/"))
+				if err == nil && f != nil {
+					fileServer.ServeHTTP(c.Response(), c.Request())
+					return nil
+				}
+			}
+
+			// SPA fallback: serve index.html for all non-file routes
+			c.Request().URL.Path = "/"
+			fileServer.ServeHTTP(c.Response(), c.Request())
+			return nil
+		}
+	})
 }
 
 func (s *Server) loginRateLimiter() echo.MiddlewareFunc {

@@ -10,7 +10,7 @@ require (
 	github.com/swaggo/echo-swagger v1.5.2
 	github.com/swaggo/swag v1.16.6
 	golang.org/x/crypto v0.52.0
-	golift.io/starr v1.3.0
+	golift.io/starr v1.3.1
 	modernc.org/sqlite v1.50.1
 )
 

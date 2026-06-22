@@ -5,7 +5,7 @@ go 1.25.7
 require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
-	github.com/labstack/echo/v4 v4.15.3
+	github.com/labstack/echo/v4 v4.15.4
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/swaggo/echo-swagger v1.5.2
 	github.com/swaggo/swag v1.16.6
@@ -25,7 +25,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/mattn/go-colorable v0.1.15 // indirect
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
@@ -39,7 +39,7 @@ require (
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/mod v0.36.0 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect

@@ -23,6 +23,20 @@ updates:
       - dependencies
       - ci
     open-pull-requests-limit: 5
+    groups:
+      # github/codeql-action/* sub-actions MUST bump together. init writes a
+      # config file that analyze reads, and the two refuse to talk across a
+      # version boundary ("Loaded a configuration file for version X, but
+      # running version Y"). Bumping them in separate PRs leaves main red from
+      # the moment the first merges until the second does.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
+      actions-all:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "github/codeql-action*"
 
   - package-ecosystem: docker
     directory: /docker
@@ -62,11 +76,15 @@ updates:
           - "@types/react"
           - "@types/react-dom"
           - "react-router"
+      # typescript belongs here rather than in a group of its own: typescript-eslint
+      # declares a peer range on typescript, so bumping either alone gives npm an
+      # unsatisfiable tree (ERESOLVE) and the PR can never go green. They move together.
       eslint-ecosystem:
         patterns:
           - "eslint"
           - "eslint-*"
           - "@eslint/*"
+          - "typescript"
           - "typescript-eslint"
           - "globals"
       types:

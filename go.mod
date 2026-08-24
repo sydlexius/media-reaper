@@ -11,7 +11,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	golang.org/x/crypto v0.55.0
 	golift.io/starr v1.3.1
-	modernc.org/sqlite v1.56.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (

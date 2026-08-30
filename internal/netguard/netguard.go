@@ -78,6 +78,14 @@ func isBlockedIP(ip net.IP) bool {
 		ip.IsUnspecified()
 }
 
+// lookupFunc resolves a host to its candidate IPs. It matches the signature
+// of (*net.Resolver).LookupIP with the network argument fixed to "ip".
+type lookupFunc func(ctx context.Context, host string) ([]net.IP, error)
+
+// dialFunc opens a connection to a literal address. It matches the
+// signature of (*net.Dialer).DialContext.
+type dialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
 // safeDialContext returns a DialContext that resolves the target host and
 // dials a specific resolved IP, chosen and validated in the same call. This
 // closes the DNS-rebinding gap: there is no separate earlier lookup whose
@@ -86,26 +94,56 @@ func isBlockedIP(ip net.IP) bool {
 // runs for every connection net/http opens, including one opened to follow
 // a redirect, so redirect targets get the same IP-level enforcement as the
 // original request.
-func safeDialContext(dialer *net.Dialer, blocked func(net.IP) bool) func(ctx context.Context, network, addr string) (net.Conn, error) {
+//
+// It tries every permitted resolved IP in order, not just the first: since
+// each dial targets a specific IP literal rather than the original hostname,
+// net/http's own happy-eyeballs-style multi-address fallback never runs here,
+// so this function has to provide that fallback itself or a multi-A-record
+// or dual-stack host would fail permanently whenever its first resolved
+// address happened to be unreachable. Two failure modes are kept distinct in
+// the returned error: ErrBlockedHost means every resolved address was
+// blocked by policy (nothing permitted was ever attempted); a dial error
+// means at least one permitted address was tried and failed to connect
+// (a reachability problem, not a policy one).
+//
+// lookup and dial are parameterized (rather than always using
+// net.DefaultResolver and a *net.Dialer directly) so tests can exercise the
+// per-IP fallback logic deterministically -- with a synthetic multi-address
+// response and a fake dialer that fails for a chosen IP -- without depending
+// on real DNS returning a specific number of addresses or the first of them
+// being unreachable in the way a specific test needs.
+func safeDialContext(dial dialFunc, lookup lookupFunc, blocked func(net.IP) bool) func(ctx context.Context, network, addr string) (net.Conn, error) {
 	return func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, fmt.Errorf("splitting host/port: %w", err)
 		}
 
-		ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+		ips, err := lookup(ctx, host)
 		if err != nil {
 			return nil, fmt.Errorf("resolving host: %w", err)
 		}
+
+		var lastDialErr error
+		attempted := false
 
 		for _, ip := range ips {
 			if blocked(ip) {
 				continue
 			}
-			return dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+			attempted = true
+
+			conn, dialErr := dial(ctx, network, net.JoinHostPort(ip.String(), port))
+			if dialErr == nil {
+				return conn, nil
+			}
+			lastDialErr = dialErr
 		}
 
-		return nil, fmt.Errorf("%w: %s", ErrBlockedHost, host)
+		if !attempted {
+			return nil, fmt.Errorf("%w: %s", ErrBlockedHost, host)
+		}
+		return nil, fmt.Errorf("dialing %s: %w", host, lastDialErr)
 	}
 }
 
@@ -124,37 +162,63 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
+// refuseRedirects is a CheckRedirect that never follows a redirect. It
+// reproduces golift.io/starr's own default client behavior
+// (golift.io/starr@v1.3.1/helpers.go, Client()), which this package's
+// Sonarr/Radarr callers relied on before adopting netguard.NewHTTPClient.
+// Preserving it here means this SSRF fix does not also loosen the *arr
+// posture by introducing redirect-following where none existed before; an
+// *arr API has no legitimate reason to redirect a request.
+func refuseRedirects(_ *http.Request, _ []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
 // NewHTTPClient returns an http.Client hardened against SSRF: every dial
 // (including one triggered by a followed redirect) resolves and validates
-// the destination IP immediately before connecting to it, and every
-// redirect hop is re-validated at the URL level before it is followed.
+// the destination IP immediately before connecting to it.
 //
 // insecureSkipVerify controls TLS certificate verification. It exists
 // because the Sonarr/Radarr client library (golift.io/starr) defaults to
 // skipping verification for these LAN-deployed services, which commonly run
 // self-signed certificates; callers must pass the same value they used
 // before adopting this client to avoid a functional regression.
-func NewHTTPClient(timeout time.Duration, insecureSkipVerify bool) *http.Client {
-	return newHTTPClient(timeout, insecureSkipVerify, isBlockedIP)
+//
+// followRedirects controls whether a 3xx response is followed at all.
+// When true, every redirect hop is re-validated at the URL level (scheme,
+// credentials, host) before being followed, on top of the same per-dial IP
+// validation as the initial request. When false, the client never follows a
+// redirect at all (see refuseRedirects) -- callers whose prior client never
+// followed redirects should pass false here to avoid introducing new
+// behavior alongside the SSRF fix.
+func NewHTTPClient(timeout time.Duration, insecureSkipVerify, followRedirects bool) *http.Client {
+	return newHTTPClient(timeout, insecureSkipVerify, followRedirects, isBlockedIP)
 }
 
 // newHTTPClient is the internal constructor behind NewHTTPClient. It takes
 // an explicit blocked predicate so tests can exercise the redirect/dial
 // plumbing against a permissive policy without depending on real network
 // access to a non-loopback address.
-func newHTTPClient(timeout time.Duration, insecureSkipVerify bool, blocked func(net.IP) bool) *http.Client {
+func newHTTPClient(timeout time.Duration, insecureSkipVerify, followRedirects bool, blocked func(net.IP) bool) *http.Client {
 	dialer := &net.Dialer{Timeout: dialTimeout}
+	lookup := func(ctx context.Context, host string) ([]net.IP, error) {
+		return net.DefaultResolver.LookupIP(ctx, "ip", host)
+	}
 
 	transport := &http.Transport{
-		DialContext: safeDialContext(dialer, blocked),
+		DialContext: safeDialContext(dialer.DialContext, lookup, blocked),
 	}
 	if insecureSkipVerify {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // matches golift.io/starr's existing default for LAN-deployed *arr instances with self-signed certificates
 	}
 
+	redirectPolicy := refuseRedirects
+	if followRedirects {
+		redirectPolicy = checkRedirect
+	}
+
 	return &http.Client{
 		Timeout:       timeout,
-		CheckRedirect: checkRedirect,
+		CheckRedirect: redirectPolicy,
 		Transport:     transport,
 	}
 }

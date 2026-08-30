@@ -3,6 +3,7 @@ package netguard
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -95,7 +96,7 @@ func TestHTTPClientBlocksLoopbackDial(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewHTTPClient(5*time.Second, false)
+	client := NewHTTPClient(5*time.Second, false, true)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
 	if err != nil {
 		t.Fatalf("building request: %v", err)
@@ -106,6 +107,96 @@ func TestHTTPClientBlocksLoopbackDial(t *testing.T) {
 		_ = resp.Body.Close()
 		t.Fatal("expected dial to loopback target to fail, got success")
 	}
+}
+
+// TestSafeDialContextFallsBackToNextPermittedIP proves that when a host
+// resolves to multiple permitted addresses and the first one fails to
+// dial, safeDialContext tries the next one rather than failing outright.
+// Each dial targets a specific IP literal, so net/http's own multi-address
+// fallback (which only engages when dialing a hostname) never runs here --
+// this behavior has to be provided by safeDialContext itself.
+func TestSafeDialContextFallsBackToNextPermittedIP(t *testing.T) {
+	unreachable := net.ParseIP("192.0.2.1") // TEST-NET-1 (RFC 5737), not blocked by policy
+	reachable := net.ParseIP("192.0.2.2")
+
+	lookup := func(context.Context, string) ([]net.IP, error) {
+		return []net.IP{unreachable, reachable}, nil
+	}
+
+	var dialedIPs []string
+	dial := func(_ context.Context, _, addr string) (net.Conn, error) {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			t.Fatalf("splitting dialed addr %q: %v", addr, err)
+		}
+		dialedIPs = append(dialedIPs, host)
+		if host == unreachable.String() {
+			return nil, fmt.Errorf("simulated dial failure for %s", host)
+		}
+		return &net.TCPConn{}, nil
+	}
+
+	allowAll := func(net.IP) bool { return false }
+	dialCtx := safeDialContext(dial, lookup, allowAll)
+
+	conn, err := dialCtx(context.Background(), "tcp", "example.invalid:80")
+	if err != nil {
+		t.Fatalf("expected fallback to the second permitted IP to succeed, got: %v", err)
+	}
+	if conn == nil {
+		t.Fatal("expected a non-nil connection")
+	}
+
+	want := []string{unreachable.String(), reachable.String()}
+	if len(dialedIPs) != len(want) || dialedIPs[0] != want[0] || dialedIPs[1] != want[1] {
+		t.Errorf("dial order: got %v, want %v", dialedIPs, want)
+	}
+}
+
+// TestSafeDialContextDistinguishesBlockedFromUnreachable proves the two
+// failure modes stay distinct: ErrBlockedHost when every resolved address
+// was blocked by policy (nothing was ever dialed), versus a plain dial
+// error when a permitted address was tried and failed to connect.
+func TestSafeDialContextDistinguishesBlockedFromUnreachable(t *testing.T) {
+	t.Run("all resolved addresses blocked", func(t *testing.T) {
+		lookup := func(context.Context, string) ([]net.IP, error) {
+			return []net.IP{net.ParseIP("127.0.0.1")}, nil
+		}
+		dialCalled := false
+		dial := func(context.Context, string, string) (net.Conn, error) {
+			dialCalled = true
+			return nil, errors.New("should not be called")
+		}
+
+		dialCtx := safeDialContext(dial, lookup, isBlockedIP)
+		_, err := dialCtx(context.Background(), "tcp", "example.invalid:80")
+		if !errors.Is(err, ErrBlockedHost) {
+			t.Errorf("expected ErrBlockedHost, got %v", err)
+		}
+		if dialCalled {
+			t.Error("dial should never be called when every resolved address is blocked")
+		}
+	})
+
+	t.Run("permitted address unreachable", func(t *testing.T) {
+		lookup := func(context.Context, string) ([]net.IP, error) {
+			return []net.IP{net.ParseIP("192.0.2.1")}, nil
+		}
+		wantErr := errors.New("connection refused")
+		dial := func(context.Context, string, string) (net.Conn, error) {
+			return nil, wantErr
+		}
+
+		allowAll := func(net.IP) bool { return false }
+		dialCtx := safeDialContext(dial, lookup, allowAll)
+		_, err := dialCtx(context.Background(), "tcp", "example.invalid:80")
+		if errors.Is(err, ErrBlockedHost) {
+			t.Error("expected a dial error, not ErrBlockedHost, for a permitted-but-unreachable address")
+		}
+		if !errors.Is(err, wantErr) {
+			t.Errorf("expected the underlying dial error to be wrapped, got %v", err)
+		}
+	})
 }
 
 // TestHTTPClientAllowsPermittedTarget proves a target that isBlockedIP
@@ -122,7 +213,7 @@ func TestHTTPClientAllowsPermittedTarget(t *testing.T) {
 	defer server.Close()
 
 	allowAll := func(net.IP) bool { return false }
-	client := newHTTPClient(5*time.Second, false, allowAll)
+	client := newHTTPClient(5*time.Second, false, true, allowAll)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL, nil)
 	if err != nil {
@@ -156,7 +247,7 @@ func TestHTTPClientRevalidatesRedirects(t *testing.T) {
 	defer server.Close()
 
 	allowAll := func(net.IP) bool { return false }
-	client := newHTTPClient(5*time.Second, false, allowAll)
+	client := newHTTPClient(5*time.Second, false, true, allowAll)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/start", nil)
 	if err != nil {
@@ -186,7 +277,7 @@ func TestHTTPClientFollowsRedirectToPermittedTarget(t *testing.T) {
 	defer server.Close()
 
 	allowAll := func(net.IP) bool { return false }
-	client := newHTTPClient(5*time.Second, false, allowAll)
+	client := newHTTPClient(5*time.Second, false, true, allowAll)
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/start", nil)
 	if err != nil {
@@ -204,5 +295,44 @@ func TestHTTPClientFollowsRedirectToPermittedTarget(t *testing.T) {
 	}
 	if finalURL != "/final" {
 		t.Errorf("redirect target: got %q, want %q", finalURL, "/final")
+	}
+}
+
+// TestHTTPClientRefusesRedirectsWhenNotFollowing proves a client built with
+// followRedirects=false (the policy used for the Sonarr/Radarr clients, to
+// preserve starr.Client's own never-follow behavior) does not follow a
+// redirect to an otherwise-permitted target, and instead returns the 3xx
+// response itself.
+func TestHTTPClientRefusesRedirectsWhenNotFollowing(t *testing.T) {
+	redirectTargetHit := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/start" {
+			http.Redirect(w, r, "/final", http.StatusFound)
+			return
+		}
+		redirectTargetHit = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	allowAll := func(net.IP) bool { return false }
+	client := newHTTPClient(5*time.Second, false, false, allowAll)
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+"/start", nil)
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("expected the client to return the redirect response rather than error, got: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusFound {
+		t.Errorf("status: got %d, want %d (redirect should not have been followed)", resp.StatusCode, http.StatusFound)
+	}
+	if redirectTargetHit {
+		t.Error("redirect target was hit; a followRedirects=false client must not follow redirects")
 	}
 }

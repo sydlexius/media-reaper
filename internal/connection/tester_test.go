@@ -16,18 +16,19 @@ import (
 // user-facing "Message" field.
 func TestTestConnectionRejectsBlockedURLs(t *testing.T) {
 	tests := []struct {
-		name     string
-		connType string
-		url      string
+		name          string
+		connType      string
+		url           string
+		wantMsgSubstr string // asserted with strings.Contains against result.Message
 	}{
-		{name: "emby loopback", connType: "emby", url: "http://127.0.0.1:8096"},
-		{name: "sonarr loopback", connType: "sonarr", url: "http://localhost:8989"},
-		{name: "radarr loopback", connType: "radarr", url: "http://127.0.0.1:7878"},
-		{name: "emby cloud metadata", connType: "emby", url: "http://169.254.169.254/latest/meta-data/"},
-		{name: "sonarr cloud metadata", connType: "sonarr", url: "http://169.254.169.254/"},
-		{name: "radarr cloud metadata", connType: "radarr", url: "http://169.254.169.254/"},
-		{name: "emby non-http scheme", connType: "emby", url: "gopher://192.168.1.50/"},
-		{name: "emby embedded credentials", connType: "emby", url: "http://user:pass@192.168.1.50"},
+		{name: "emby loopback", connType: "emby", url: "http://127.0.0.1:8096", wantMsgSubstr: "blocked address"},
+		{name: "sonarr loopback", connType: "sonarr", url: "http://localhost:8989", wantMsgSubstr: "blocked address"},
+		{name: "radarr loopback", connType: "radarr", url: "http://127.0.0.1:7878", wantMsgSubstr: "blocked address"},
+		{name: "emby cloud metadata", connType: "emby", url: "http://169.254.169.254/latest/meta-data/", wantMsgSubstr: "blocked address"},
+		{name: "sonarr cloud metadata", connType: "sonarr", url: "http://169.254.169.254/", wantMsgSubstr: "blocked address"},
+		{name: "radarr cloud metadata", connType: "radarr", url: "http://169.254.169.254/", wantMsgSubstr: "blocked address"},
+		{name: "emby non-http scheme", connType: "emby", url: "gopher://192.168.1.50/", wantMsgSubstr: "url scheme must be"},
+		{name: "emby embedded credentials", connType: "emby", url: "http://user:pass@192.168.1.50", wantMsgSubstr: "embedded credentials"},
 	}
 
 	for _, tt := range tests {
@@ -39,8 +40,12 @@ func TestTestConnectionRejectsBlockedURLs(t *testing.T) {
 			if result.Success {
 				t.Errorf("TestConnection(%q, %q) succeeded, want rejection", tt.connType, tt.url)
 			}
-			if result.Message == "" {
-				t.Error("expected a non-empty rejection message")
+			// Assert the specific rejection reason, not just that something
+			// failed: a plain connection-refused error also produces a
+			// non-empty message, so a bare emptiness check would keep
+			// passing even if the actual blocking logic regressed entirely.
+			if !strings.Contains(result.Message, tt.wantMsgSubstr) {
+				t.Errorf("TestConnection(%q, %q) message = %q, want it to contain %q", tt.connType, tt.url, result.Message, tt.wantMsgSubstr)
 			}
 		})
 	}

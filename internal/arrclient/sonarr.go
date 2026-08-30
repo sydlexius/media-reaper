@@ -20,13 +20,17 @@ type SonarrClient struct {
 // (scheme, credentials, host) by netguard.ValidateURL at the
 // connection-test choke point (internal/connection/tester.go); the http
 // client installed here additionally resolves and validates the
-// destination IP immediately before every dial (including redirect hops),
-// which is the layer that actually defends against SSRF and DNS rebinding.
-// InsecureSkipVerify is kept true to match starr.Client's own default,
-// since Sonarr instances commonly run self-signed certificates on the LAN.
+// destination IP immediately before every dial, which is the layer that
+// actually defends against SSRF and DNS rebinding. InsecureSkipVerify is
+// kept true to match starr.Client's own default, since Sonarr instances
+// commonly run self-signed certificates on the LAN. Redirects are refused
+// (followRedirects=false), matching starr.Client's own CheckRedirect
+// (golift.io/starr@v1.3.1/helpers.go), which never follows one -- this fix
+// must not loosen that posture, and the Sonarr API has no legitimate reason
+// to redirect a request.
 func NewSonarrClient(url, apiKey string) *SonarrClient {
 	config := starr.New(apiKey, url, defaultTimeout)
-	config.Client = netguard.NewHTTPClient(defaultTimeout, true)
+	config.Client = netguard.NewHTTPClient(defaultTimeout, true, false)
 	return &SonarrClient{client: sonarr.New(config)}
 }
 

@@ -25,7 +25,7 @@ func TestTestConnection(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test-key")
+	client := newWithHTTPClient(server.URL, "test-key", server.Client())
 	info, err := client.TestConnection(context.Background())
 	if err != nil {
 		t.Fatalf("TestConnection failed: %v", err)
@@ -52,7 +52,7 @@ func TestGetUsers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test-key")
+	client := newWithHTTPClient(server.URL, "test-key", server.Client())
 	users, err := client.GetUsers(context.Background())
 	if err != nil {
 		t.Fatalf("GetUsers failed: %v", err)
@@ -84,7 +84,7 @@ func TestGetLibraries(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test-key")
+	client := newWithHTTPClient(server.URL, "test-key", server.Client())
 	libs, err := client.GetLibraries(context.Background())
 	if err != nil {
 		t.Fatalf("GetLibraries failed: %v", err)
@@ -119,7 +119,7 @@ func TestGetUserItems(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "test-key")
+	client := newWithHTTPClient(server.URL, "test-key", server.Client())
 	result, err := client.GetUserItems(context.Background(), "user1", &ItemQuery{
 		IncludeTypes: "Movie",
 		Recursive:    true,
@@ -146,10 +146,28 @@ func TestConnectionFailure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL, "bad-key")
+	client := newWithHTTPClient(server.URL, "bad-key", server.Client())
 	_, err := client.TestConnection(context.Background())
 	if err == nil {
 		t.Error("expected error for unauthorized request")
+	}
+}
+
+func TestNewBlocksLoopback(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(SystemInfo{ServerName: "Should Not Be Reached"})
+	}))
+	defer server.Close()
+
+	// New (the real, production constructor) must reject the loopback
+	// address httptest.NewServer always binds to. This is the guard
+	// actually wired into the production path; the other tests in this
+	// file use newWithHTTPClient to bypass it because they exercise
+	// request/response handling, not SSRF policy.
+	client := New(server.URL, "test-key")
+	_, err := client.TestConnection(context.Background())
+	if err == nil {
+		t.Fatal("expected New's client to reject a loopback target, got no error")
 	}
 }
 
@@ -162,7 +180,7 @@ func TestTrailingSlashTrimmed(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := New(server.URL+"/", "test-key")
+	client := newWithHTTPClient(server.URL+"/", "test-key", server.Client())
 	_, err := client.TestConnection(context.Background())
 	if err != nil {
 		t.Fatalf("TestConnection with trailing slash failed: %v", err)

@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/sydlexius/media-reaper/internal/netguard"
 )
 
 const defaultTimeout = 30 * time.Second
@@ -20,12 +22,32 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// New creates an Emby API client.
+// New creates an Emby API client. The caller-supplied baseURL is expected to
+// have already been validated (scheme, credentials, host) by
+// netguard.ValidateURL at the connection-test choke point
+// (internal/connection/tester.go); the http client returned here additionally
+// resolves and validates the destination IP immediately before every dial
+// (including redirect hops), which is the layer that actually defends
+// against SSRF and DNS rebinding. Emby does not default to self-signed
+// certificates the way the *arr stack does, so TLS verification stays on.
+// This client had no CheckRedirect before this fix (net/http's default
+// follow-and-revalidate behavior), so following redirects with per-hop
+// validation here is a real policy choice, not a preserved regression.
 func New(baseURL, apiKey string) *Client {
+	return newWithHTTPClient(baseURL, apiKey, netguard.NewHTTPClient(defaultTimeout, false, true))
+}
+
+// newWithHTTPClient builds a Client around an explicit http.Client. It
+// exists so the package's own unit tests can exercise request-building and
+// response-decoding logic against an httptest.Server, which always listens
+// on loopback and would otherwise be rejected by the SSRF-guarded client
+// New returns. SSRF/redirect/DNS-rebinding policy itself is covered by
+// internal/netguard's tests, not here.
+func newWithHTTPClient(baseURL, apiKey string, httpClient *http.Client) *Client {
 	return &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: defaultTimeout},
+		httpClient: httpClient,
 	}
 }
 
@@ -116,7 +138,7 @@ func (c *Client) get(ctx context.Context, path string, queryParams map[string]st
 		req.URL.RawQuery = q.Encode()
 	}
 
-	resp, err := c.httpClient.Do(req) //nolint:gosec // URL is constructed from admin-configured baseURL, not user input
+	resp, err := c.httpClient.Do(req) //nolint:gosec // G704: gosec's taint analysis cannot see into c.httpClient's Transport; the SSRF/DNS-rebinding defense is netguard.NewHTTPClient's DialContext, which resolves and validates every destination IP (including redirect hops) immediately before dialing it -- see internal/netguard/netguard.go. CodeQL alert #3 on this same line is dismissed by the PR author with the same rationale, not fixed by code.
 	if err != nil {
 		return fmt.Errorf("executing request: %w", err)
 	}

@@ -135,7 +135,7 @@ func (c *Client) get(ctx context.Context, path string, queryParams map[string]st
 		req.URL.RawQuery = q.Encode()
 	}
 
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.httpClient.Do(req) //nolint:gosec // G704: gosec's taint analysis cannot see into c.httpClient's Transport; the SSRF/DNS-rebinding defense is netguard.NewHTTPClient's DialContext, which resolves and validates every destination IP (including redirect hops) immediately before dialing it -- see internal/netguard/netguard.go
 	if err != nil {
 		return fmt.Errorf("executing request: %w", err)
 	}

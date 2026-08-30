@@ -6,6 +6,8 @@ import (
 
 	"golift.io/starr"
 	"golift.io/starr/sonarr"
+
+	"github.com/sydlexius/media-reaper/internal/netguard"
 )
 
 // SonarrClient wraps the golift/starr sonarr client.
@@ -14,8 +16,17 @@ type SonarrClient struct {
 }
 
 // NewSonarrClient creates a Sonarr client from a URL and decrypted API key.
+// The caller-supplied url is expected to have already been validated
+// (scheme, credentials, host) by netguard.ValidateURL at the
+// connection-test choke point (internal/connection/tester.go); the http
+// client installed here additionally resolves and validates the
+// destination IP immediately before every dial (including redirect hops),
+// which is the layer that actually defends against SSRF and DNS rebinding.
+// InsecureSkipVerify is kept true to match starr.Client's own default,
+// since Sonarr instances commonly run self-signed certificates on the LAN.
 func NewSonarrClient(url, apiKey string) *SonarrClient {
 	config := starr.New(apiKey, url, defaultTimeout)
+	config.Client = netguard.NewHTTPClient(defaultTimeout, true)
 	return &SonarrClient{client: sonarr.New(config)}
 }
 
